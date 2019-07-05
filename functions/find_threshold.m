@@ -23,8 +23,13 @@ if dim(2) ~= length(steps)
 end
 
 % Do stuff
-rhoavg = nanmean(rhomat);
-rhosd = nanstd(rhomat);
+if dim(1) > 1
+    rhoavg = nanmean(rhomat,2);
+    rhosd = nanstd(rhomat);
+else                    % Assumin single subject
+    rhoavg = rhomat;
+    rhosd  = zeros(size(rhomat));
+end
 
 [maxval,idx] = max(rhoavg);
 cutoff = steps(idx);

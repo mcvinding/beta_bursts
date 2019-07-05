@@ -11,9 +11,9 @@ subs = find_subs(dirs.megDir);                                %Find subjects in 
 cd(dirs.megDir);
 
 %% Settings
-overwrite = 0;   % Overwirte old files 0=false or 1=true
+overwrite = 0;      % Overwirte old files 0=false or 1=true
 
-steps = 0:0.1:5;
+steps = 0:0.1:5;    % Steps taken to define threshold
 
 %% Find peaks: testing multiple methods based on the litterature
 rho_sdamp = nan(length(subs),length(steps),2);

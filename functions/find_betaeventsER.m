@@ -35,6 +35,8 @@ function [output, rhomat] = find_betaeventsER(cfg, data)
 % OUTPUT:
 % ...
 
+% Check for FieltTrip
+check_for_ft;
 % ft_checkdata.
 dat = ft_checkdata(data, 'datatype','timelock');
 
@@ -57,14 +59,16 @@ if ~any(strcmp({'amp','pow'}, cfg.corrtype))
     error('Unknown cutoff method \"%s\".',cfg.cutofftype)
 end
 
-trl = dat.sampleinfo;
-tim = data.time{1};
-% trl = trl-trl(1,1)+1; %Corrent for non-zero sample offset
+% Data info
+trl         = dat.sampleinfo;
+tim         = data.time{1};
+ntrials     = length(trl);
+fs          = data.fsample;
 
 % Get mean epoch power and amplitude (per epoch)
-epoamp = nan(length(trl),1);
-epopow = nan(length(trl),1);
-for n = 1:length(trl)
+epoamp = nan(ntrials,1);
+epopow = nan(ntrials,1);
+for n = 1:ntrials
     epoamp(n) = mean(data.trial{n});
     epopow(n) = mean(data.trial{n}.^2);
 end
@@ -83,7 +87,7 @@ rhomat   = nan(length(steps),1);
 cutoff   = zeros(1,length(steps));
 bdat     = struct();
 
-
+% Loop over thresholds
 for ii = 1:length(steps)
     if strcmp(cfg.cutofftype, 'sd')
         cutoff(ii) = med+sd*steps(ii);
@@ -95,12 +99,17 @@ for ii = 1:length(steps)
     
     % Correct onset/offset
     tmp_burst(:,end) = 0;
-    dtburst = diff([zeros(size(tmp_burst,1),1) tmp_burst], [], 2);
-    n_events = sum(dtburst==1,2);    % Events per trial
-    burst = zeros(size(tmp_burst));
-    maxmat = zeros(size(tmp_burst));
+    dtburst     = diff([zeros(size(tmp_burst,1),1) tmp_burst], [], 2);
+    n_events    = sum(dtburst==1,2);    % Events per trial
     
-    for kk = 1:size(tempdat,1)
+    %Init values
+    burst       = zeros(size(tmp_burst));
+    maxmat      = zeros(size(tmp_burst));
+    neve        = nan(ntrials,1);
+    trialdat    = cell(ntrials,1);
+    
+    % Loop over tirals
+    for kk = 1:ntrials
         maxarray = zeros(n_events(kk),1);
         maxidx   = zeros(n_events(kk),1);
         trldat = tempdat(kk,:);
@@ -154,84 +163,55 @@ for ii = 1:length(steps)
             end
             
             burst(kk,:) = trlb;   % Corrected matrix
+            
+            % Get summaries (again)
+            trlb(end) = 0;
+            dtrbl = diff([0 trlb]);
+            startb  = find(dtrbl==1);      % Start of burst
+            endb    = find(dtrbl==-1);     % End of burst´
+            
+            for n = 1:n_events(kk)
+                [maxarray(n), maxidx(n)] = max(trldat(startb(n):endb(n)));
+                maxidx(n) = maxidx(n)+startb(n)-1;
+            end
+            
+        % No correction
+        else                       
+            trlb = zeros(1,length(trldat));
+            for n = 1:n_events(kk)
+                trlb(startb(n):endb(n)) = 1;
+            end
         end
-    end
         
-    % Get summaries (again)
-    burst(:,end) = 0;
-    dburst = diff([zeros(size(burst,1),1) burst], [], 2);
-
-    neve    = sum(dburst==1,2);
-    for kk = 1:size(dburst,1)
-        startb  = find(dburst(kk,:)==1);      % Start of burst
-        endb    = find(dburst(kk,:)==-1);     % End of burst´
-
-        maxarray = zeros(neve(kk),1);
-        maxidx   = zeros(neve(kk),1);
-        for n = 1:neve(kk)
-            [maxarray(n), maxidx(n)] = max(tempdat(kk,startb(n):endb(n)));
-        end
-        maxidx = maxidx+startb'-1;
-        maxmat(kk,maxidx) = 1;
+        neve(kk) = length(startb);
+        
+        % Assign values
+        burst(kk,:)             = trlb;
+        maxmat(kk,maxidx)       = 1;
+        trialdat{kk}.event      = [startb' endb'];
+        trialdat{kk}.eventlen   = (endb-startb)/fs;                 
     end
     
-    % Get correlation [MOVE TO END]
+    % Get correlation to determine threshold
     if strcmp('amp', cfg.corrtype)
         rhomat(ii) = corr(neve, epoamp);
     elseif strcmp('pow', cfg.corrtype)
         rhomat(ii) = corr(neve, epopow);
-    end
-    
-    if strcmp(cfg.makeplot,'yes')
-        evemark = nan(size(tempdat(kk,:)));
-        for n = 1:neve(kk)
-            evemark(startb(n):endb(n)) = tempdat(kk,startb(n):endb(n));
-        end
-%         xidx = 1:length(dat)/data.fsample;
-        if length(steps) >= 8 
-            dim = ceil(length(steps)/8);
-            subplot(dim,8,ii); hold on
-        else
-            figure; hold on
-        end
-        plot(tempdat(kk,:));
-        plot(repmat(cutoff(ii),size(tempdat(kk,:))),'r--');
-        plot(maxidx,maxarray, 'ko');
-        plot(1:length(tempdat),evemark, 'linewidth',2);
-        xlim([0 length(dat)]);
-        title(ii);
+    end  
         
-        % Pesure-Raster plot
-        subplot(4,1,1:3);
-        pltmat = burst;
-        pltmat(maxmat==1) = 2;
-        imagesc(tim, 1, pltmat);     
-        ylabel('Trial');
-        subplot(4,1,4);
-        plot(tim,mean(burst))
-        ylabel('Burst prob.'); xlabel('Time')
-
-    end
-    
-    % Length of burst
-    blen    = endb-startb;          % Length of burst
-    evelen   = blen/data.fsample;      % Length of burst is seconds  
-    if any(blen<0)
-        error('negative length of event')
-    end
-
     % Arrange data (work in progress)
+    bdat(ii).trialdat   = trialdat;
     bdat(ii).eventmat   = burst;
-%     bdat(ii).evelen     = evelen';
     bdat(ii).maxmat     = maxmat;
     bdat(ii).time       = tim;         % Copy (assume all trials have same time axis)
-%     bdat(ii).maxidx     = maxidx;
+    bdat(ii).nevent     = neve;
+
 end
 
 % Make output
+output.ntrials      = ntrials;
 output.threshold    = steps;
-% output.n_events     = n_events;
 output.cutoff       = cutoff;
 output.bdat         = bdat;
 
-% End
+%END
