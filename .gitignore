@@ -1,2 +1,6 @@
-# Ignore fileendings
+# Ignore file endings
 *~
+
+# Ignore folders
+development/
+sandbox/
