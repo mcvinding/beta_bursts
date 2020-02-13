@@ -29,8 +29,8 @@ Example scripts are copy/paste from other projects. Filenames and examples are n
 ## Publications
 Most of this was developed for the following publication:
 
-Vinding, M. C., Tsitsi, P., Waldthaler, J., Oostenveld, R., Ingvar, M., Svenningsson, P., & Lundqvist, D. (2019). Reduction of spontaneous cortical beta bursts in Parkinson's disease is linked to symptom severity. *biorXiv.org*. https://doi.org/10.1101/775494
+  Vinding, M. C., Tsitsi, P., Waldthaler, J., Oostenveld, R., Ingvar, M., Svenningsson, P., & Lundqvist, D. (2019). Reduction of spontaneous cortical beta bursts in Parkinson's disease is linked to symptom severity. *biorXiv.org*. https://doi.org/10.1101/775494
 
 ## Contact
-For questions or suggestions
+For questions or suggestions contact: mikkel.vinding@ki.se
 
