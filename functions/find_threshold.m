@@ -24,7 +24,7 @@ end
 
 % Do stuff
 if dim(1) > 1
-    rhoavg = nanmean(rhomat,2);
+    rhoavg = nanmean(rhomat,1);
     rhosd = nanstd(rhomat);
 else                    % Assumin single subject
     rhoavg = rhomat;

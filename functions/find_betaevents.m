@@ -54,6 +54,9 @@ if ~any(strcmp({'amp','pow'}, cfg.corrtype))
     error('Unknown cutoff method \"%s\".',cfg.cutofftype)
 end
 
+% Remove sampleinfo for indexing later
+data.sampleinfo = data.sampleinfo-data.sampleinfo(1)+1;
+
 % Make pseudo-tirals.
 cfg.length      = ft_getopt(cfg, 'length', 3);
 cfg.overlap     = ft_getopt(cfg, 'overlap', 0);
