@@ -55,7 +55,9 @@ if ~any(strcmp({'amp','pow'}, cfg.corrtype))
 end
 
 % Remove sampleinfo for indexing later
-data.sampleinfo = data.sampleinfo-data.sampleinfo(1)+1;
+if isfield(data, 'sampleinfo')
+    data.sampleinfo = data.sampleinfo-data.sampleinfo(1)+1;
+end
 
 % Make pseudo-tirals.
 cfg.length      = ft_getopt(cfg, 'length', 3);
