@@ -25,7 +25,7 @@ function [output, rhomat] = find_betaevents(cfg, data)
 %                     threshold crossing (default='no').
 % cfg.length        = [num] length of epoch window in seconds. Passed to
 %                     FT_REDEFINETRIAL (default=3).
-% cfg.overlap       = [num] overlap between epochs assed to FT_REDEFINETRIAL
+% cfg.overlap       = [num] overlap between epochs passed to FT_REDEFINETRIAL
 %                     (default=0, i.e. no overlap)
 % cfg.makeplot      = ['yes'/'no'] plot the time series with cutoff, peaks,
 %                     and events marked (default='no').
@@ -40,10 +40,10 @@ cfg = ft_checkconfig(cfg, 'required', 'steps');
 steps = cfg.steps;
 
 % cfg.getcutoff   = ft_getopt(cfg, 'getcutoff', 'no');
-cfg.cutofftype  = ft_getopt(cfg, 'cutofftype', 'med');
-cfg.corrtype    = ft_getopt(cfg, 'corrtype', 'amp');
-cfg.makeplot    = ft_getopt(cfg, 'makeplot', 'no');
-cfg.halfmax     = ft_getopt(cfg, 'halfmax', 'no');
+cfg.cutofftype  = ft_getopt(cfg, 'cutofftype',  'med');
+cfg.corrtype    = ft_getopt(cfg, 'corrtype',    'amp');
+cfg.makeplot    = ft_getopt(cfg, 'makeplot',    'no');
+cfg.halfmax     = ft_getopt(cfg, 'halfmax',     'no');
 
 % Check variables
 if ~any(strcmp({'sd','med'},cfg.cutofftype))
@@ -57,6 +57,15 @@ end
 % Remove sampleinfo for indexing later
 if isfield(data, 'sampleinfo')
     data.sampleinfo = data.sampleinfo-data.sampleinfo(1)+1;
+end
+
+% Select channel data
+if isfield(cfg, 'channel')
+    cf = [];
+    cf.channel = cfg.channel;
+    data = ft_selectdata(cfg, data);
+elseif size(data.trial{:},1) < 2
+    error('Only works on single time series. Data has %i. Consider specifying cfg.channel', size(data.trial{:},1))
 end
 
 % Make pseudo-tirals.
@@ -83,7 +92,7 @@ rhomat   = nan(length(steps),1);
 cutoff   = zeros(1,length(steps));
 bdat     = struct();
 
-% Find values
+% Find summary values
 dat = data.trial{:};
 med = median(dat);
 sd = std(dat);
@@ -189,7 +198,7 @@ for ii = 1:length(steps)
     
     if strcmp(cfg.makeplot,'yes')
 %         xidx = 1:length(dat)/data.fsample;
-        if length(steps) >= 8 
+        if length(steps) >= 8
             dim = ceil(length(steps)/8);
             subplot(dim,8,ii); hold on
         else
@@ -200,7 +209,7 @@ for ii = 1:length(steps)
         plot(maxidx,maxarray, 'ko');
         plot(1:length(dat),evemark, 'linewidth',2);
         xlim([0 length(dat)]);
-        title(ii);
+        title(steps(ii));
     end
     
     % Length of burst
@@ -222,5 +231,6 @@ output.steps    = steps;
 output.n_events = n_events;
 output.cutoff   = cutoff;
 output.bdat     = bdat;
+output.chan     = data.label{:};
 
 % End
