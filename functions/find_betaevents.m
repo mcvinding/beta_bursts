@@ -8,27 +8,36 @@ function [output, rhomat] = find_betaevents(cfg, data)
 %
 % USE: [output, rhomat] = find_betaevents(cfg, data)
 % INPUT:
-% cfg.steps         = [Nx1] Steps to find correlation and threshold (required)
-% cfg.cutofftype    = ['sd'/'med'] Should cutoff be determined relative to
-%                     x*standard deviations away from median (Little et al, 2018)
-%                     or x*medians away from median (Shin et al. 2016).
-%                     (default='med').
-% cfg.corrtype      = ['amp'/'pow'] What to correalte: amplitude of epochs
-%                     vs. number of events or power (amp^2) of epoch vs.
-%                     number of beta events (Little et al, 2018).
-%                     (default='amp').
+% cfg.steps         = [Nx1] Steps to find correlation and threshold
+%                     (required). Should be steps in order of medians/sds for
+%                     cutofftype = 'sd'/'med' (e.g. 1:0.1:3) or percentile
+%                     values (e.g. [70,75,80,85]) for 'pct'.
+% cfg.cutofftype    = ['sd'/'med'/'pct'] Should cutoff be determined as
+%                     x*standard deviations away from median (Little et al,
+%                     2019). x*medians away from median (Shin et al. 2016).
+%                     Based on percentile of the total signal variation
+%                     (Lofredi et al. 2020) (default='med').
 % cfg.halfmax       = ['yes'/'no'/'mixed'] redefine timing of events as half-
 %                     maximum of the peak value. Overlapping peaks are counted 
 %                     as one event. Otherwise, event length is defined by
 %                     threshold crossing. 'Mixed' replace half-maximum
 %                     values above threshold with the value of the
 %                     threshold crossing (default='no').
+%   Options for CUTOFFTYPE = 'sd / 'med'
+% cfg.corrtype      = ['amp'/'pow'] What to correalte: amplitude of epochs 
+%                     vs. number of events or power (amp^2) of epoch vs. 
+%                     number of beta events (Little et al, 2019). (default='amp').
 % cfg.length        = [num] length of epoch window in seconds. Passed to
 %                     FT_REDEFINETRIAL (default=3).
 % cfg.overlap       = [num] overlap between epochs passed to FT_REDEFINETRIAL
 %                     (default=0, i.e. no overlap)
+%   Options for CUTOFFTYPE = 'pct'
+% cfg.pctentile     = [num] specified as cfg.steps.
 % cfg.makeplot      = ['yes'/'no'] plot the time series with cutoff, peaks,
 %                     and events marked (default='no').
+% cfg.glue          = ['yes'/'no'] ...
+% cfg.mindist       = ...
+%
 % OUTPUT:
 % ...
 
@@ -46,12 +55,16 @@ cfg.makeplot    = ft_getopt(cfg, 'makeplot',    'no');
 cfg.halfmax     = ft_getopt(cfg, 'halfmax',     'no');
 
 % Check variables
-if ~any(strcmp({'sd','med'},cfg.cutofftype))
-    error('Unknown cutoff method \"%s\".',cfg.cutofftype)
-end
+if ~strcmp('pct', cfg.cutofftype)
+    if ~any(strcmp({'sd','med'},cfg.cutofftype))
+        error('Unknown cutoff method \"%s\".',cfg.cutofftype)
+    end
 
-if ~any(strcmp({'amp','pow'}, cfg.corrtype))
-    error('Unknown cutoff method \"%s\".',cfg.cutofftype)
+    if ~any(strcmp({'amp','pow'}, cfg.corrtype))
+        error('Unknown cutoff method \"%s\".',cfg.cutofftype)
+    end
+else
+%     cfg = ft_checkconfig(cfg, 'required', 'pctentile');
 end
 
 % Remove sampleinfo for indexing later
@@ -64,29 +77,33 @@ if isfield(cfg, 'channel')
     cf = [];
     cf.channel = cfg.channel;
     data = ft_selectdata(cfg, data);
-elseif size(data.trial{:},1) < 2
-    error('Only works on single time series. Data has %i. Consider specifying cfg.channel', size(data.trial{:},1))
+elseif size(data.trial{:},1) > 1
+    error('Only works on single time series. Data has %i channels. Consider specifying cfg.channel', size(data.trial{:},1))
 end
 
-% Make pseudo-tirals.
-cfg.length      = ft_getopt(cfg, 'length', 3);
-cfg.overlap     = ft_getopt(cfg, 'overlap', 0);
-epo = ft_redefinetrial(cfg, data);
+if any(strcmp({'sd','med'},cfg.cutofftype))
+    % Make pseudo-tirals.
+    cfg.length      = ft_getopt(cfg, 'length', 3);
+    cfg.overlap     = ft_getopt(cfg, 'overlap', 0);
+    epo = ft_redefinetrial(cfg, data);
 
-trl = epo.sampleinfo;
-% trl = trl-trl(1,1)+1; %Corrent for non-zero sample offset
+    trl = epo.sampleinfo;
+    % trl = trl-trl(1,1)+1; %Corrent for non-zero sample offset
 
-% Get epoch power and amplitude
-epoamp = nan(length(epo.trial),1);
-epopow = nan(length(epo.trial),1);
-for n = 1:length(trl)
-    epoamp(n) = mean(epo.trial{n});
-    epopow(n) = mean(epo.trial{n}.^2);
+    % Get epoch power and amplitude
+    epoamp = nan(length(epo.trial),1);
+    epopow = nan(length(epo.trial),1);
+    for n = 1:length(trl)
+        epoamp(n) = mean(epo.trial{n});
+        epopow(n) = mean(epo.trial{n}.^2);
+    end
+else
+    trl = [];
 end
 
 % Cutoffs
 % Initiate values
-pkmat    = zeros(length(trl),1);
+if ~isempty(trl); pkmat = zeros(length(trl),1); end
 n_events = zeros(1,length(steps));
 rhomat   = nan(length(steps),1);
 cutoff   = zeros(1,length(steps));
@@ -101,21 +118,26 @@ fprintf('Median of time-series: %.3f. sd: %.3f.\n', med, sd)
 for ii = 1:length(steps)
     if strcmp(cfg.cutofftype, 'sd')
         cutoff(ii) = med+sd*steps(ii);
-        burst = dat >= cutoff(ii);   
     elseif strcmp(cfg.cutofftype, 'med')
         cutoff(ii) = med+med*steps(ii);
-        burst = dat >= cutoff(ii);
+    elseif strcmp(cfg.cutofftype, 'pct')
+        cutoff(ii) = prctile(dat, steps(ii));
     end
+    burst = dat >= cutoff(ii);
 
-    for n = 1:length(trl)
-        tmp = burst(trl(n,1):trl(n,2));
-        pkmat(n) = sum((diff(tmp)==1));
+    if ~isempty(trl);
+        for n = 1:length(trl)
+            tmp = burst(trl(n,1):trl(n,2));
+            pkmat(n) = sum((diff(tmp)==1));
+        end
     end
     
-    if strcmp('amp', cfg.corrtype)
-        rhomat(ii) = corr(pkmat, epoamp);
-    elseif strcmp('pow', cfg.corrtype)
-        rhomat(ii) = corr(pkmat, epopow);
+    if any(strcmp({'sd','med'},cfg.cutofftype))
+        if strcmp('amp', cfg.corrtype)
+            rhomat(ii) = corr(pkmat, epoamp);
+        elseif strcmp('pow', cfg.corrtype)
+            rhomat(ii) = corr(pkmat, epopow);
+        end
     end
     
     % Get summaries
