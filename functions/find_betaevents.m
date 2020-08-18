@@ -16,27 +16,32 @@ function [output, rhomat] = find_betaevents(cfg, data)
 %                     x*standard deviations away from median (Little et al,
 %                     2019). x*medians away from median (Shin et al. 2016).
 %                     Based on percentile of the total signal variation
-%                     (Lofredi et al. 2020) (default='med').
+%                     (Tinkhauser et al. 2017) (default='med').
 % cfg.halfmax       = ['yes'/'no'/'mixed'] redefine timing of events as half-
 %                     maximum of the peak value. Overlapping peaks are counted 
 %                     as one event. Otherwise, event length is defined by
 %                     threshold crossing. 'Mixed' replace half-maximum
 %                     values above threshold with the value of the
 %                     threshold crossing (default='no').
+% cfg.makeplot      = ['yes'/'no'] plot the time series with cutoff, peaks,
+%                     and events marked (default='no').
+% cfg.minlen        = [num or empty] specify the minimun required length of
+%                     a burst (in seconds).
+% cfg.mindist       = [num or empty] specify the minimun required length
+%                     between to concecutive burst (in seconds).
+%
 %   Options for CUTOFFTYPE = 'sd / 'med'
 % cfg.corrtype      = ['amp'/'pow'] What to correalte: amplitude of epochs 
 %                     vs. number of events or power (amp^2) of epoch vs. 
 %                     number of beta events (Little et al, 2019). (default='amp').
 % cfg.length        = [num] length of epoch window in seconds. Passed to
 %                     FT_REDEFINETRIAL (default=3).
-% cfg.overlap       = [num] overlap between epochs passed to FT_REDEFINETRIAL
+% cfg.overlap       = [num] overlap between epochs. Passed to FT_REDEFINETRIAL
 %                     (default=0, i.e. no overlap)
+%
 %   Options for CUTOFFTYPE = 'pct'
 % cfg.pctentile     = [num] specified as cfg.steps.
-% cfg.makeplot      = ['yes'/'no'] plot the time series with cutoff, peaks,
-%                     and events marked (default='no').
-% cfg.glue          = ['yes'/'no'] ...
-% cfg.mindist       = ...
+
 %
 % OUTPUT:
 % ...
@@ -53,6 +58,8 @@ cfg.cutofftype  = ft_getopt(cfg, 'cutofftype',  'med');
 cfg.corrtype    = ft_getopt(cfg, 'corrtype',    'amp');
 cfg.makeplot    = ft_getopt(cfg, 'makeplot',    'no');
 cfg.halfmax     = ft_getopt(cfg, 'halfmax',     'no');
+cfg.minlen      = ft_getopt(cfg, 'minlen',      []);
+cfg.mindist     = ft_getopt(cfg, 'mindist',     []);
 
 % Check variables
 if ~strcmp('pct', cfg.cutofftype)
@@ -65,6 +72,14 @@ if ~strcmp('pct', cfg.cutofftype)
     end
 else
 %     cfg = ft_checkconfig(cfg, 'required', 'pctentile');
+end
+
+if ~isempty(cfg.minlen)
+    minlenSam = cfg.minlen*data.fsample;
+end
+
+if ~isempty(cfg.mindist)
+    mindistSam = cfg.mindist*data.fsample;
 end
 
 % Remove sampleinfo for indexing later
@@ -81,7 +96,7 @@ elseif size(data.trial{:},1) > 1
     error('Only works on single time series. Data has %i channels. Consider specifying cfg.channel', size(data.trial{:},1))
 end
 
-if any(strcmp({'sd','med'},cfg.cutofftype))
+if any(strcmp({'sd','med'}, cfg.cutofftype))
     % Make pseudo-tirals.
     cfg.length      = ft_getopt(cfg, 'length', 3);
     cfg.overlap     = ft_getopt(cfg, 'overlap', 0);
@@ -124,46 +139,31 @@ for ii = 1:length(steps)
         cutoff(ii) = prctile(dat, steps(ii));
     end
     burst = dat >= cutoff(ii);
-
-    if ~isempty(trl);
-        for n = 1:length(trl)
-            tmp = burst(trl(n,1):trl(n,2));
-            pkmat(n) = sum((diff(tmp)==1));
-        end
-    end
     
-    if any(strcmp({'sd','med'},cfg.cutofftype))
-        if strcmp('amp', cfg.corrtype)
-            rhomat(ii) = corr(pkmat, epoamp);
-        elseif strcmp('pow', cfg.corrtype)
-            rhomat(ii) = corr(pkmat, epopow);
-        end
-    end
-    
-    % Get summaries
+    % Get initial summaries
     if burst(end) == 1; burst(end) = 0; end
     dburst = diff([0 burst]);
     n_events(ii) = sum(dburst==1);
     startb  = find(dburst==1);      % Start of burst
     endb    = find(dburst==-1);     % End of burst´
     
-    maxarray = zeros(n_events(ii),1);
-    maxidx   = zeros(n_events(ii),1);
+    maxarray = zeros(1,n_events(ii));
+    maxidx   = zeros(1,n_events(ii));
     for n = 1:n_events(ii)
         [maxarray(n), maxidx(n)] = max(dat(startb(n):endb(n)));
     end
 
-    maxidx = maxidx+startb'-1;
+    maxidx = maxidx+startb-1;  % correct idx
         
-    % start-stop based on half-max width
-    if strcmp(cfg.halfmax, 'yes') || strcmp(cfg.halfmax, 'mixed')
+    % start-stop based on half-max width (halfmax='yes' or 'mixed')
+    if any(strcmp({'yes','mixed'}, cfg.halfmax))
         begsam = zeros(1,n_events(ii));
         endsam = zeros(1,n_events(ii));
-        hlfmx = maxarray/2;
+        hlfmx = maxarray/2;       
         
-        if  strcmp(cfg.halfmax, 'mixed')
+        if strcmp(cfg.halfmax, 'mixed')
             hlfmx(hlfmx>cutoff(ii)) = cutoff(ii);
-        end
+        end    
         
         for n = 1:n_events(ii)
             %start
@@ -189,50 +189,59 @@ for ii = 1:length(steps)
             end
             endsam(n) = idx;
         end
-
+        
         cburst = zeros(length(dat),1);
         for n = 1:n_events(ii)
             cburst(begsam(n):endsam(n)) = 1;
-        end
+        end        
+        burst = cburst;
+    end
 
-        % Get summaries (again)
-        if cburst(end) == 1; cburst(end) = 0; end
-        dcburst = diff([0 cburst']);
-        neve = sum(dcburst==1);
-        startb  = find(dcburst==1);      % Start of burst
-        endb    = find(dcburst==-1);     % End of burst´
+    % correct min time between events
+    if ~isempty(cfg.mindist)
+        dburst  = diff([0 burst]);
+        startb  = find(dburst==1);              % Start of burst
+        endb    = find(dburst==-1);             % End of burst
+        intvl = startb(2:end)-endb(1:end-1);    % Length of interval
+        short_intvl = intvl <= mindistSam;
 
-        maxarray = zeros(neve,1);
-        maxidx   = zeros(neve,1);
-        for n = 1:neve
-            [maxarray(n), maxidx(n)] = max(dat(startb(n):endb(n)));
+        cburst = burst;
+        for n = find(short_intvl)
+            cburst(endb(n):startb(n+1)) = 1;
         end
-        maxidx = maxidx+startb'-1;
+        burst = cburst;
+    end
         
-        n_events(ii) = neve;
-    end
-    
-    evemark = nan(length(dat),1);
-    for n = 1:n_events(ii)
-        evemark(startb(n):endb(n)) = dat(startb(n):endb(n));
-    end
+    % correct min length
+    if ~isempty(cfg.minlen)
+        dburst  = diff([0 burst]);
+        startb  = find(dburst==1);              % Start of burst
+        endb    = find(dburst==-1);             % End of burst
+        blen    = endb-startb;                  % Length of burst
+        short_len = blen <= minlenSam;
 
-    
-    if strcmp(cfg.makeplot,'yes')
-%         xidx = 1:length(dat)/data.fsample;
-        if length(steps) >= 8
-            dim = ceil(length(steps)/8);
-            subplot(dim,8,ii); hold on
-        else
-            figure; hold on
+        cburst = burst;
+        for n = find(short_len)
+            cburst(startb(n):endb(n)) = 0;
         end
-        plot(dat);
-        plot(repmat(cutoff(ii),length(dat),1),'r--');
-        plot(maxidx,maxarray, 'ko');
-        plot(1:length(dat),evemark, 'linewidth',2);
-        xlim([0 length(dat)]);
-        title(steps(ii));
+        burst = cburst;
     end
+        
+    % Get final summaries
+    if burst(end) == 1; burst(end) = 0; end
+    dcburst = diff([0 burst]);
+    neve = sum(dcburst==1);
+    startb  = find(dcburst==1);      % Start of burst
+    endb    = find(dcburst==-1);     % End of burst´
+
+    maxarray = zeros(neve,1);
+    maxidx   = zeros(neve,1);
+    for n = 1:neve
+        [maxarray(n), maxidx(n)] = max(dat(startb(n):endb(n)));
+    end
+    maxidx = maxidx+startb'-1;
+
+    n_events(ii) = neve;
     
     % Length of burst
     blen    = endb-startb;          % Length of burst
@@ -246,6 +255,21 @@ for ii = 1:length(steps)
     bdat(ii).evelen = evelen';
     bdat(ii).maxpk  = maxarray;
     bdat(ii).maxidx = maxidx;
+    
+    
+    % Get correlations    
+    if any(strcmp({'sd','med'},cfg.cutofftype))
+        for n = 1:length(trl)
+            tmp = burst(trl(n,1):trl(n,2));
+            pkmat(n) = sum((diff(tmp)==1));
+        end
+        
+        if strcmp('amp', cfg.corrtype)
+            rhomat(ii) = corr(pkmat, epoamp);
+        elseif strcmp('pow', cfg.corrtype)
+            rhomat(ii) = corr(pkmat, epopow);
+        end
+    end
 end
 
 % Make output
@@ -254,5 +278,11 @@ output.n_events = n_events;
 output.cutoff   = cutoff;
 output.bdat     = bdat;
 output.chan     = data.label{:};
+output.cfg      = cfg;
+
+if strcmp(cfg.makeplot,'yes')
+    addpath('./plotting')
+    eventplot(output,dat)
+end
 
 % End
