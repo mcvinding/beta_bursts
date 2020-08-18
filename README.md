@@ -4,7 +4,7 @@ General scripts and functions for time-domain analysis of beta bursts/events in 
 **STILL WORK IN PROGRESS: NO WARRANTY OR GUARANTEE WHATSOEVER**
 
 Supposed to do the following:
-1. Find beta events in continuous data (e.g. resting state)
+1. Find beta events in continuous data (e.g. resting state).
 2. Find beta events in event-related data.
 
 The functions will take a single channel band-pass filtered time-series to find bursts. Can be for either a continuous time-series or epochs.
@@ -27,9 +27,9 @@ Example scripts are copy/paste from other projects. Filenames and examples are n
 * Functionality for other bands that beta; e.g. alpha fluctuations.
 
 ## Publications
-Most of this was developed for the following publication:
+Most of this was developed for and used in the following publication:
 
-  Vinding, M. C., Tsitsi, P., Waldthaler, J., Oostenveld, R., Ingvar, M., Svenningsson, P., & Lundqvist, D. (2019). Reduction of spontaneous cortical beta bursts in Parkinson's disease is linked to symptom severity. *biorXiv.org*. https://doi.org/10.1101/775494
+   Vinding, M. C., Tsitsi, P., Waldthaler, J., Oostenveld, R., Ingvar, M., Svenningsson, P., & Lundqvist, D. (2020). Reduction of spontaneous cortical beta bursts in Parkinson’s disease is linked to symptom severity. _Brain Communications_. https://doi.org/10.1093/braincomms/fcaa052
 
 ## Contact
 For questions or suggestions contact: mikkel.vinding@ki.se
