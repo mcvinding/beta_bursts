@@ -190,7 +190,7 @@ for ii = 1:length(steps)
             endsam(n) = idx;
         end
         
-        cburst = zeros(length(dat),1);
+        cburst = zeros(1,length(dat));
         for n = 1:n_events(ii)
             cburst(begsam(n):endsam(n)) = 1;
         end        
