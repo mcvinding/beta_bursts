@@ -47,7 +47,8 @@ function [output, rhomat] = find_betaevents(cfg, data)
 % ...
 
 % TO DO:
-% * Need a ft_checkdata section.
+% * Needs a ft_checkdata section.
+% * add fieldtrip option
 
 % opts
 cfg = ft_checkconfig(cfg, 'required', 'steps');
@@ -60,6 +61,12 @@ cfg.makeplot    = ft_getopt(cfg, 'makeplot',    'no');
 cfg.halfmax     = ft_getopt(cfg, 'halfmax',     'no');
 cfg.minlen      = ft_getopt(cfg, 'minlen',      []);
 cfg.mindist     = ft_getopt(cfg, 'mindist',     []);
+
+% Add plot fun
+if strcmp(cfg.makeplot, 'yes') &&  ~exist('eventplot', 'file')
+    mfilepath=fileparts(which('find_betaevents.m'));
+    addpath(fullfile(mfilepath,'../plotting'));
+end
 
 % Check variables
 if ~strcmp('pct', cfg.cutofftype)
@@ -202,6 +209,8 @@ for ii = 1:length(steps)
         dburst  = diff([0 burst]);
         startb  = find(dburst==1);              % Start of burst
         endb    = find(dburst==-1);             % End of burst
+        if length(endb) == length(startb)-1
+            endb(end+1) = length(dburst); end
         intvl = startb(2:end)-endb(1:end-1);    % Length of interval
         short_intvl = intvl <= mindistSam;
 
@@ -256,7 +265,6 @@ for ii = 1:length(steps)
     bdat(ii).maxpk  = maxarray;
     bdat(ii).maxidx = maxidx;
     
-    
     % Get correlations    
     if any(strcmp({'sd','med'},cfg.cutofftype))
         for n = 1:length(trl)
@@ -281,7 +289,6 @@ output.chan     = data.label{:};
 output.cfg      = cfg;
 
 if strcmp(cfg.makeplot,'yes')
-    addpath('./plotting')
     eventplot(output,dat)
 end
 
