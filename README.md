@@ -23,8 +23,7 @@ Example scripts are copy/paste from other projects. Filenames and examples are n
 * Missing proper documentation.
 
 ## Possible future developments
-* Gluing option in definfing beta bursts
-* Functionality for other bands that beta; e.g. alpha fluctuations.
+* Functionality for other bands that beta; e.g. alpha fluctuations. This should net be that different, but requires validation.
 
 ## Publications
 Most of this was developed for and used in the following publication:
